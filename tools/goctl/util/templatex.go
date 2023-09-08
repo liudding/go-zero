@@ -55,7 +55,12 @@ func (t *DefaultTemplate) SaveTo(data any, path string, forceUpdate bool) error 
 
 // Execute returns the codes after the template executed
 func (t *DefaultTemplate) Execute(data any) (*bytes.Buffer, error) {
-	tem, err := template.New(t.name).Parse(t.text)
+	funcMap := template.FuncMap{
+		"contains": strings.Contains,
+		"replace": strings.Replace,
+		"trim": strings.Trim,
+	}
+	tem, err := template.New(t.name).Funcs(funcMap).Parse(t.text)
 	if err != nil {
 		return nil, errorx.Wrap(err, "template parse error:", t.text)
 	}
