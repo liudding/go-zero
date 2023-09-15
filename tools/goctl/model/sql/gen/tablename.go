@@ -16,7 +16,7 @@ func genTableName(table Table) (string, error) {
 		Parse(text).
 		Execute(map[string]any{
 			"tableName":             table.Name.Source(),
-			"upperStartCamelObject": table.Name.ToCamel(),
+			"upperStartCamelObject": table.FinalName.ToCamel(),
 		})
 	if err != nil {
 		return "", nil

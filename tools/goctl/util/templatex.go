@@ -5,6 +5,7 @@ import (
 	goformat "go/format"
 	"os"
 	"regexp"
+	"strings"
 	"text/template"
 
 	"github.com/zeromicro/go-zero/tools/goctl/internal/errorx"
@@ -57,8 +58,8 @@ func (t *DefaultTemplate) SaveTo(data any, path string, forceUpdate bool) error 
 func (t *DefaultTemplate) Execute(data any) (*bytes.Buffer, error) {
 	funcMap := template.FuncMap{
 		"contains": strings.Contains,
-		"replace": strings.Replace,
-		"trim": strings.Trim,
+		"replace":  strings.Replace,
+		"trim":     strings.Trim,
 	}
 	tem, err := template.New(t.name).Funcs(funcMap).Parse(t.text)
 	if err != nil {

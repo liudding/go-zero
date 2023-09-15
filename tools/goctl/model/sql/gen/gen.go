@@ -36,17 +36,16 @@ type (
 	Option func(generator *defaultGenerator)
 
 	code struct {
-		importsCode            string
-		varsCode               string
-		typesCode              string
-		newCode                string
-		insertCode             string
-		findCode               []string
-		updateCode             string
-		deleteCode             string
-		cacheExtra             string
-		tableName              string
-		tableNameWithoutPrefix string
+		importsCode string
+		varsCode    string
+		typesCode   string
+		newCode     string
+		insertCode  string
+		findCode    []string
+		updateCode  string
+		deleteCode  string
+		cacheExtra  string
+		tableName   string
 	}
 
 	codeTuple struct {
@@ -225,6 +224,7 @@ func (g *defaultGenerator) genFromDDL(filename string, withCache, strict bool, r
 		if err != nil {
 			return nil, err
 		}
+
 		code, err := g.genModel(*table, partials, withCache)
 		if err != nil {
 			return nil, err
@@ -250,6 +250,8 @@ type Table struct {
 	UniqueCacheKey         []Key
 	ContainsUniqueCacheKey bool
 	ignoreColumns          []string
+	removePrefix           string
+	FinalName              stringx.String
 }
 
 func (t Table) isIgnoreColumns(columnName string) bool {
@@ -274,6 +276,8 @@ func (g *defaultGenerator) genPartials(in parser.Table, withCache bool, removePr
 	table.UniqueCacheKey = uniqueKey
 	table.ContainsUniqueCacheKey = len(uniqueKey) > 0
 	table.ignoreColumns = g.ignoreColumns
+	table.FinalName = stringx.From(strings.TrimPrefix(table.Name.Source(), removePrefix))
+	table.removePrefix = removePrefix
 
 	importsCode, err := genImports(table, withCache, in.ContainsTime())
 	if err != nil {
@@ -331,17 +335,16 @@ func (g *defaultGenerator) genPartials(in parser.Table, withCache bool, removePr
 	}
 
 	code := &code{
-		importsCode:            importsCode,
-		varsCode:               varsCode,
-		typesCode:              typesCode,
-		newCode:                newCode,
-		insertCode:             insertCode,
-		findCode:               findCode,
-		updateCode:             updateCode,
-		deleteCode:             deleteCode,
-		cacheExtra:             ret.cacheExtra,
-		tableName:              tableName,
-		tableNameWithoutPrefix: strings.TrimLeft(tableName, removePrefix),
+		importsCode: importsCode,
+		varsCode:    varsCode,
+		typesCode:   typesCode,
+		newCode:     newCode,
+		insertCode:  insertCode,
+		findCode:    findCode,
+		updateCode:  updateCode,
+		deleteCode:  deleteCode,
+		cacheExtra:  ret.cacheExtra,
+		tableName:   tableName,
 	}
 
 	return &table, code, nil
@@ -400,8 +403,8 @@ func (g *defaultGenerator) genModelCustom(table Table, code *code, withCache boo
 		"extraMethod":           code.cacheExtra,
 		"tableName":             code.tableName,
 		"data":                  table,
-		"upperStartCamelObject": table.Name.ToCamel(),
-		"lowerStartCamelObject": stringx.From(table.Name.ToCamel()).Untitle(),
+		"upperStartCamelObject": table.FinalName.ToCamel(),
+		"lowerStartCamelObject": stringx.From(table.FinalName.ToCamel()).Untitle(),
 	})
 	if err != nil {
 		return "", err

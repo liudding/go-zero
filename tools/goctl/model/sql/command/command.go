@@ -135,6 +135,7 @@ func MySqlDataSource(_ *cobra.Command, _ []string) error {
 		idea:          idea,
 		strict:        VarBoolStrict,
 		ignoreColumns: mergeColumns(VarStringSliceIgnoreColumns),
+		removePrefix:  VarStringRemovePrefix,
 	}
 	return fromMysqlDataSource(arg)
 }
