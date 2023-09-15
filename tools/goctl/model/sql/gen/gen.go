@@ -36,16 +36,17 @@ type (
 	Option func(generator *defaultGenerator)
 
 	code struct {
-		importsCode string
-		varsCode    string
-		typesCode   string
-		newCode     string
-		insertCode  string
-		findCode    []string
-		updateCode  string
-		deleteCode  string
-		cacheExtra  string
-		tableName   string
+		importsCode            string
+		varsCode               string
+		typesCode              string
+		newCode                string
+		insertCode             string
+		findCode               []string
+		updateCode             string
+		deleteCode             string
+		cacheExtra             string
+		tableName              string
+		tableNameWithoutPrefix string
 	}
 
 	codeTuple struct {
@@ -109,8 +110,8 @@ func newDefaultOption() Option {
 	}
 }
 
-func (g *defaultGenerator) StartFromDDL(filename string, withCache, strict bool, database string) error {
-	modelList, err := g.genFromDDL(filename, withCache, strict, database)
+func (g *defaultGenerator) StartFromDDL(filename string, withCache, strict bool, removePrefix string, database string) error {
+	modelList, err := g.genFromDDL(filename, withCache, strict, removePrefix, database)
 	if err != nil {
 		return err
 	}
@@ -118,7 +119,7 @@ func (g *defaultGenerator) StartFromDDL(filename string, withCache, strict bool,
 	return g.createFile(modelList)
 }
 
-func (g *defaultGenerator) StartFromInformationSchema(tables map[string]*model.Table, withCache, strict bool) error {
+func (g *defaultGenerator) StartFromInformationSchema(tables map[string]*model.Table, withCache, strict bool, removePrefix string) error {
 	m := make(map[string]*codeTuple)
 	for _, each := range tables {
 		table, err := parser.ConvertDataType(each, strict)
@@ -126,7 +127,7 @@ func (g *defaultGenerator) StartFromInformationSchema(tables map[string]*model.T
 			return err
 		}
 
-		t, code, err := g.genPartials(*table, withCache)
+		t, code, err := g.genPartials(*table, withCache, removePrefix)
 
 		genCode, err := g.genModel(*t, code, withCache)
 		if err != nil {
@@ -210,7 +211,7 @@ func (g *defaultGenerator) createFile(modelList map[string]*codeTuple) error {
 }
 
 // ret1: key-table name,value-code
-func (g *defaultGenerator) genFromDDL(filename string, withCache, strict bool, database string) (
+func (g *defaultGenerator) genFromDDL(filename string, withCache, strict bool, removePrefix string, database string) (
 	map[string]*codeTuple, error,
 ) {
 	m := make(map[string]*codeTuple)
@@ -220,7 +221,7 @@ func (g *defaultGenerator) genFromDDL(filename string, withCache, strict bool, d
 	}
 
 	for _, e := range tables {
-		table, partials, err := g.genPartials(*e, withCache)
+		table, partials, err := g.genPartials(*e, withCache, removePrefix)
 		if err != nil {
 			return nil, err
 		}
@@ -260,7 +261,7 @@ func (t Table) isIgnoreColumns(columnName string) bool {
 	return false
 }
 
-func (g *defaultGenerator) genPartials(in parser.Table, withCache bool) (*Table, *code, error) {
+func (g *defaultGenerator) genPartials(in parser.Table, withCache bool, removePrefix string) (*Table, *code, error) {
 	if len(in.PrimaryKey.Name.Source()) == 0 {
 		return nil, nil, fmt.Errorf("table %s: missing primary key", in.Name.Source())
 	}
@@ -330,16 +331,17 @@ func (g *defaultGenerator) genPartials(in parser.Table, withCache bool) (*Table,
 	}
 
 	code := &code{
-		importsCode: importsCode,
-		varsCode:    varsCode,
-		typesCode:   typesCode,
-		newCode:     newCode,
-		insertCode:  insertCode,
-		findCode:    findCode,
-		updateCode:  updateCode,
-		deleteCode:  deleteCode,
-		cacheExtra:  ret.cacheExtra,
-		tableName:   tableName,
+		importsCode:            importsCode,
+		varsCode:               varsCode,
+		typesCode:              typesCode,
+		newCode:                newCode,
+		insertCode:             insertCode,
+		findCode:               findCode,
+		updateCode:             updateCode,
+		deleteCode:             deleteCode,
+		cacheExtra:             ret.cacheExtra,
+		tableName:              tableName,
+		tableNameWithoutPrefix: strings.TrimLeft(tableName, removePrefix),
 	}
 
 	return &table, code, nil

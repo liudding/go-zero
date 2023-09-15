@@ -53,6 +53,7 @@ var (
 	VarBoolStrict bool
 	// VarStringSliceIgnoreColumns represents the columns which are ignored.
 	VarStringSliceIgnoreColumns []string
+	VarStringRemovePrefix       string
 )
 
 var errNotMatched = errors.New("sql not matched")
@@ -92,6 +93,7 @@ func MysqlDDL(_ *cobra.Command, _ []string) error {
 		database:      database,
 		strict:        VarBoolStrict,
 		ignoreColumns: mergeColumns(VarStringSliceIgnoreColumns),
+		removePrefix:  VarStringRemovePrefix,
 	}
 	return fromDDL(arg)
 }
@@ -193,6 +195,7 @@ func PostgreSqlDataSource(_ *cobra.Command, _ []string) error {
 	cache := VarBoolCache
 	idea := VarBoolIdea
 	style := VarStringStyle
+	removePrefix := VarStringRemovePrefix
 	schema := VarStringSchema
 	home := VarStringHome
 	remote := VarStringRemote
@@ -217,7 +220,7 @@ func PostgreSqlDataSource(_ *cobra.Command, _ []string) error {
 		return err
 	}
 
-	return fromPostgreSqlDataSource(url, pattern, dir, schema, cfg, cache, idea, VarBoolStrict)
+	return fromPostgreSqlDataSource(url, pattern, dir, schema, cfg, cache, idea, VarBoolStrict, removePrefix)
 }
 
 type ddlArg struct {
@@ -227,6 +230,7 @@ type ddlArg struct {
 	database      string
 	strict        bool
 	ignoreColumns []string
+	removePrefix  string
 }
 
 func fromDDL(arg ddlArg) error {
@@ -252,7 +256,7 @@ func fromDDL(arg ddlArg) error {
 	}
 
 	for _, file := range files {
-		err = generator.StartFromDDL(file, arg.cache, arg.strict, arg.database)
+		err = generator.StartFromDDL(file, arg.cache, arg.strict, arg.removePrefix, arg.database)
 		if err != nil {
 			return err
 		}
@@ -268,6 +272,7 @@ type dataSourceArg struct {
 	cache, idea   bool
 	strict        bool
 	ignoreColumns []string
+	removePrefix  string
 }
 
 func fromMysqlDataSource(arg dataSourceArg) error {
@@ -326,10 +331,10 @@ func fromMysqlDataSource(arg dataSourceArg) error {
 		return err
 	}
 
-	return generator.StartFromInformationSchema(matchTables, arg.cache, arg.strict)
+	return generator.StartFromInformationSchema(matchTables, arg.cache, arg.strict, arg.removePrefix)
 }
 
-func fromPostgreSqlDataSource(url, pattern, dir, schema string, cfg *config.Config, cache, idea, strict bool) error {
+func fromPostgreSqlDataSource(url, pattern, dir, schema string, cfg *config.Config, cache, idea, strict bool, removePrefix string) error {
 	log := console.NewConsole(idea)
 	if len(url) == 0 {
 		log.Error("%v", "expected data source of postgresql, but nothing found")
@@ -381,5 +386,5 @@ func fromPostgreSqlDataSource(url, pattern, dir, schema string, cfg *config.Conf
 		return err
 	}
 
-	return generator.StartFromInformationSchema(matchTables, cache, strict)
+	return generator.StartFromInformationSchema(matchTables, cache, strict, removePrefix)
 }
