@@ -126,17 +126,19 @@ func (g *defaultGenerator) StartFromInformationSchema(tables map[string]*model.T
 			return err
 		}
 
-		code, err := g.genModel(*table, withCache)
+		t, code, err := g.genPartials(*table, withCache)
+
+		genCode, err := g.genModel(*t, code, withCache)
 		if err != nil {
 			return err
 		}
-		customCode, err := g.genModelCustom(*table, withCache)
+		customCode, err := g.genModelCustom(*t, code, withCache)
 		if err != nil {
 			return err
 		}
 
 		m[table.Name.Source()] = &codeTuple{
-			modelCode:       code,
+			modelCode:       genCode,
 			modelCustomCode: customCode,
 		}
 	}
@@ -218,11 +220,15 @@ func (g *defaultGenerator) genFromDDL(filename string, withCache, strict bool, d
 	}
 
 	for _, e := range tables {
-		code, err := g.genModel(*e, withCache)
+		table, partials, err := g.genPartials(*e, withCache)
 		if err != nil {
 			return nil, err
 		}
-		customCode, err := g.genModelCustom(*e, withCache)
+		code, err := g.genModel(*table, partials, withCache)
+		if err != nil {
+			return nil, err
+		}
+		customCode, err := g.genModelCustom(*table, partials, withCache)
 		if err != nil {
 			return nil, err
 		}
@@ -254,9 +260,9 @@ func (t Table) isIgnoreColumns(columnName string) bool {
 	return false
 }
 
-func (g *defaultGenerator) genModel(in parser.Table, withCache bool) (string, error) {
+func (g *defaultGenerator) genPartials(in parser.Table, withCache bool) (*Table, *code, error) {
 	if len(in.PrimaryKey.Name.Source()) == 0 {
-		return "", fmt.Errorf("table %s: missing primary key", in.Name.Source())
+		return nil, nil, fmt.Errorf("table %s: missing primary key", in.Name.Source())
 	}
 
 	primaryKey, uniqueKey := genCacheKeys(in)
@@ -270,39 +276,39 @@ func (g *defaultGenerator) genModel(in parser.Table, withCache bool) (string, er
 
 	importsCode, err := genImports(table, withCache, in.ContainsTime())
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	varsCode, err := genVars(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	insertCode, insertCodeMethod, err := genInsert(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	findCode := make([]string, 0)
 	findOneCode, findOneCodeMethod, err := genFindOne(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	ret, err := genFindOneByField(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	findCode = append(findCode, findOneCode, ret.findOneMethod)
 	updateCode, updateCodeMethod, err := genUpdate(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	deleteCode, deleteCodeMethod, err := genDelete(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	var list []string
@@ -310,17 +316,17 @@ func (g *defaultGenerator) genModel(in parser.Table, withCache bool) (string, er
 		updateCodeMethod, deleteCodeMethod)
 	typesCode, err := genTypes(table, strings.Join(modelutil.TrimStringSlice(list), pathx.NL), withCache)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	newCode, err := genNew(table, withCache, g.isPostgreSql)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	tableName, err := genTableName(table)
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 
 	code := &code{
@@ -336,7 +342,32 @@ func (g *defaultGenerator) genModel(in parser.Table, withCache bool) (string, er
 		tableName:   tableName,
 	}
 
-	output, err := g.executeModel(table, code)
+	return &table, code, nil
+}
+
+func (g *defaultGenerator) genModel(table Table, code *code, withCache bool) (string, error) {
+	text, err := pathx.LoadTemplate(category, modelGenTemplateFile, template.ModelGen)
+	if err != nil {
+		return "", err
+	}
+	t := util.With("model").
+		Parse(text).
+		GoFmt(true)
+	output, err := t.Execute(map[string]any{
+		"pkg":         g.pkg,
+		"imports":     code.importsCode,
+		"vars":        code.varsCode,
+		"types":       code.typesCode,
+		"new":         code.newCode,
+		"insert":      code.insertCode,
+		"find":        strings.Join(code.findCode, "\n"),
+		"update":      code.updateCode,
+		"delete":      code.deleteCode,
+		"extraMethod": code.cacheExtra,
+		"tableName":   code.tableName,
+		"data":        table,
+		"withCache":   withCache,
+	})
 	if err != nil {
 		return "", err
 	}
@@ -344,7 +375,7 @@ func (g *defaultGenerator) genModel(in parser.Table, withCache bool) (string, er
 	return output.String(), nil
 }
 
-func (g *defaultGenerator) genModelCustom(in parser.Table, withCache bool) (string, error) {
+func (g *defaultGenerator) genModelCustom(table Table, code *code, withCache bool) (string, error) {
 	text, err := pathx.LoadTemplate(category, modelCustomTemplateFile, template.ModelCustom)
 	if err != nil {
 		return "", err
@@ -356,8 +387,19 @@ func (g *defaultGenerator) genModelCustom(in parser.Table, withCache bool) (stri
 	output, err := t.Execute(map[string]any{
 		"pkg":                   g.pkg,
 		"withCache":             withCache,
-		"upperStartCamelObject": in.Name.ToCamel(),
-		"lowerStartCamelObject": stringx.From(in.Name.ToCamel()).Untitle(),
+		"imports":               code.importsCode,
+		"vars":                  code.varsCode,
+		"types":                 code.typesCode,
+		"new":                   code.newCode,
+		"insert":                code.insertCode,
+		"find":                  strings.Join(code.findCode, "\n"),
+		"update":                code.updateCode,
+		"delete":                code.deleteCode,
+		"extraMethod":           code.cacheExtra,
+		"tableName":             code.tableName,
+		"data":                  table,
+		"upperStartCamelObject": table.Name.ToCamel(),
+		"lowerStartCamelObject": stringx.From(table.Name.ToCamel()).Untitle(),
 	})
 	if err != nil {
 		return "", err
